@@ -1,0 +1,25 @@
+{
+  "name": "mauricius/template-engine-blade",
+  "type": "library",
+  "description": "Blade Template Engine integration for ProcessWire",
+  "keywords": [ "cms","cmf", "content management system", "template engine", "blade" ],
+  "homepage": "http://www.mauriziobonani.com",
+  "license": "MIT",
+  "authors": [
+    {
+      "name" : "Maurizio Bonani",
+      "email" : "maurizio.bonani@gmail.com"
+    }
+  ],
+  "support": {
+    "email": "maurizio.bonani@gmail.com"
+  },
+  "require": {
+    "php": ">=5.6.0",
+    "philo/laravel-blade": "3.*"
+  },
+  "autoload": {
+    "files" : ["helpers.php"]
+  },
+  "minimum-stability": "dev"
+}

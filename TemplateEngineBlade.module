@@ -1,0 +1,401 @@
+<?php namespace TemplateEngineBlade;
+
+/**
+ * TemplateEngineBlade
+ *
+ * @author Maurizio Bonani
+ * @contact Maurizio Bonani @MaurizioBonani
+ * @license MIT
+ * @create  2016-04-30
+ * @style   Tab size: 4 / Soft tabs: YES
+ * @version 1.0.0
+ *
+ * ----------------------------------------------------------------------------------
+ */
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Philo\Blade\Blade;
+
+use ProcessWire\WireData;
+use ProcessWire\InputfieldWrapper;
+use ProcessWire\WireException;
+use ProcessWire\Module;
+use ProcessWire\ConfigurableModule;
+use ProcessWire\Wire;
+use ProcessWire\HookEvent;
+
+use function ProcessWire\wire;
+use function ProcessWire\wireRmdir;
+use function ProcessWire\wireChmod;
+use function ProcessWire\wireMkdir;
+use function ProcessWire\__;
+
+class TemplateEngineBlade extends WireData implements Module, ConfigurableModule
+{
+    /**
+     * The Blade Version
+     */
+    const BLADE_VERSION = '5.1';
+
+    /**
+     * The compiled templates folder
+     */
+    const COMPILE_DIR = 'TemplateEngineBlade_compile';
+
+
+    /**
+     * The Blade instance
+     * @var Blade
+     */
+    protected $blade;
+
+    /**
+     * ------------------------------------------------------------------------
+     * Gets the default configuration.
+     * ------------------------------------------------------------------------
+     * @return array
+     */
+    public static function getDefaultConfig()
+    {
+        return array(
+            'templates_path'         => 'templates/views',
+            'api_var'                => 'view',
+            'template_files_suffix'  => 'blade.php',
+            'api_vars_available'     => true,
+            'active'                 => true,
+        );
+    }
+
+    /**
+     * ------------------------------------------------------------------------
+     * Initialize the default configuration in the constructor.
+     * ------------------------------------------------------------------------
+     */
+    public function __construct()
+    {
+        foreach ($this->getDefaultConfig() as $key => $value) {
+            $this->set($key, $value);
+        }
+    }
+
+    /**
+     * ------------------------------------------------------------------------
+     * This method is called after __construct() and after any configuration
+     * data has been populated to the module. It is called before the module
+     * is handed over to the requester. This is a good place to perform any
+     * initialization that requires configuration data and can be a good place
+     * to attach hooks.
+     * ------------------------------------------------------------------------
+     */
+    public function init()
+    {}
+
+
+    /**
+     * ------------------------------------------------------------------------
+     * This method is used only by autoload modules. It is called when the
+     * entire ProcessWire API is ready to use. This may be preferable to the
+     * init() method for autoload modules because they are loaded and init()'d
+     * at boot, when everything else is loading too. The ready() method is
+     * called once the boot has completed and all API variables are ready to
+     * use, but before any page has been rendered. This makes it an excellent
+     * place to attach hooks.
+     * ------------------------------------------------------------------------
+     */
+    public function ready()
+    {
+        // ------------------------------------------------------------------------
+        // Ignore if the current template is admin.
+        // ------------------------------------------------------------------------
+        if ($this->wire('page')->template->name == 'admin') {
+            return;
+        }
+
+        $this->blade = $this->initEngine();
+        $this->wire($this->get('api_var'), $this->blade->view());
+
+        // ------------------------------------------------------------------------
+        // Add hook for rendering the page
+        // ------------------------------------------------------------------------
+        $this->addHookAfter('Page::render', $this, 'hookRender');
+    }
+
+
+    /**
+     * ------------------------------------------------------------------------
+     * Setup Blade
+     * ------------------------------------------------------------------------
+     */
+    public function initEngine()
+    {
+        $blade = new Blade($this->getTemplatesPath(), $this->getCompilePath());
+
+        // ------------------------------------------------------------------------
+        // Check if it needs to import PW variables into Blade
+        // ------------------------------------------------------------------------
+        if ($this->get('api_vars_available'))
+        {
+            foreach (Wire::getFuel() as $name => $object) {
+                if ($name == $this->get('api_var')) continue;
+                $blade->view()->share($name, $object);
+            }
+        }
+
+        $this->initBlade($blade);
+
+        return $blade;
+    }
+
+    /**
+     * ------------------------------------------------------------------------
+     * Get the path where compiled templates are stored.
+     * ------------------------------------------------------------------------
+     * @return string
+     */
+    protected function getCompilePath()
+    {
+        return $this->wire('config')->paths->cache . self::COMPILE_DIR;
+    }
+
+
+    /**
+     * ------------------------------------------------------------------------
+     * Get the path where user templates are stored.
+     * ------------------------------------------------------------------------
+     * @return string
+     */
+    protected function getTemplatesPath()
+    {
+        $path = ltrim($this->get('templates_path'), '/');
+
+        return $this->wire('config')->paths->site . rtrim($path, '/') . '/';
+    }
+
+    /**
+     * ------------------------------------------------------------------------
+     * Get the template name.
+     * ------------------------------------------------------------------------
+     * @return string
+     * @throws WireException
+     */
+    protected function getTemplateName()
+    {
+        return $this->wire('page')->template->name;
+    }
+
+
+    /**
+     * Method executed after Page::render()
+     *
+     * @param HookEvent $event
+     */
+    public function hookRender(HookEvent $event)
+    {
+        $page = $event->object;
+
+        // ------------------------------------------------------------------------
+        // If we are in the admin or the factory is not active, return early
+        // ------------------------------------------------------------------------
+        if ($page->template == 'admin' || !$this->get('active') || $page->urlSegment) {
+            return;
+        }
+
+        // ------------------------------------------------------------------------
+        // Check if the Blade template file exists, otherwise delegate the response
+        // to the template file or fall back to normal ProcessWire behavior.
+        // ------------------------------------------------------------------------
+        if (!is_file($this->getTemplatesPath() . $this->getTemplateName() . '.' . $this->get('template_files_suffix'))) {
+            return;
+        }
+
+        $event->return = $this->render();
+    }
+
+    /**
+     * ------------------------------------------------------------------------
+     * Share a key/value pair to the template.
+     * ------------------------------------------------------------------------
+     * @param $key
+     * @param $value
+     */
+    public function share($key, $value)
+    {
+
+    }
+
+    /**
+     * ------------------------------------------------------------------------
+     * Render markup from template file.
+     * ------------------------------------------------------------------------
+     * @throws WireException
+     * @return mixed
+     */
+    public function render($event)
+    {
+        try {
+            return $this->blade->view()->make($this->getTemplateName())->render();
+        } catch (\Exception $e) {
+            throw new WireException($e->getMessage());
+        }
+    }
+
+    /**
+     * ------------------------------------------------------------------------
+     * Create the cache folder in the Assets folder at module installation.
+     * ------------------------------------------------------------------------
+     *
+     * @return bool
+     * @throws WireException
+     */
+    public function install()
+    {
+        // ------------------------------------------------------------------------
+        // Check if the folder already exists.
+        // ------------------------------------------------------------------------
+        if(is_dir(wire('config')->paths->cache.self::COMPILE_DIR.DIRECTORY_SEPARATOR)) return true;
+
+        // ------------------------------------------------------------------------
+        // Try to create the folder recursively.
+        // ------------------------------------------------------------------------
+        if(wireMkdir(wire('config')->paths->cache.self::COMPILE_DIR.DIRECTORY_SEPARATOR) === false)
+        {
+            // ------------------------------------------------------------------------
+            // If the folder can not be created, trigger an error.
+            // ------------------------------------------------------------------------
+            throw new WireException('The cache folder (' . wire('config')->paths->cache . self::COMPILE_DIR.DIRECTORY_SEPARATOR . ') could not be created.');
+        }
+    }
+
+
+    /**
+     * ------------------------------------------------------------------------
+     * Remove the cache folder in the Assets folder at module uninstallation.
+     * ------------------------------------------------------------------------
+     */
+    public function uninstall()
+    {
+        // ------------------------------------------------------------------------
+        // Check if the folder already removed.
+        // ------------------------------------------------------------------------
+        if(!is_dir(wire('config')->paths->cache . self::COMPILE_DIR.DIRECTORY_SEPARATOR)) return true;
+
+        // ------------------------------------------------------------------------
+        // Try to remove the cache folder.
+        // ------------------------------------------------------------------------
+        if(wireChmod(wire('config')->paths->cache . self::COMPILE_DIR.DIRECTORY_SEPARATOR) === false OR wireRmdir(wire('config')->paths->cache . self::COMPILE_DIR.DIRECTORY_SEPARATOR, true) === false)
+        {
+            // ------------------------------------------------------------------------
+            // If the folder and files can not be removed, trigger an error.
+            // ------------------------------------------------------------------------
+            throw new WireException('The cache folder (' . wire('config')->paths->cache . self::COMPILE_DIR.DIRECTORY_SEPARATOR . ') and files could not be removed.');
+        }
+    }
+
+    /**
+     * ------------------------------------------------------------------------
+     * Hookable method called after Blade instance is created.
+     * ------------------------------------------------------------------------
+     * @param Blade $blade
+     */
+    protected function ___initBlade(Blade $blade) {}
+
+
+    /**
+     * ------------------------------------------------------------------------
+     * getModuleInfo is a module required by all modules to tell
+     * ProcessWire about them
+     * ------------------------------------------------------------------------
+     * @return array
+     */
+    public static function getModuleInfo()
+    {
+        return array(
+            // ------------------------------------------------------------------------
+            // The module'ss title, typically a little more descriptive than the
+            // class name
+            // ------------------------------------------------------------------------
+            'title' => 'Template Engine Blade',
+
+            // ------------------------------------------------------------------------
+            // Summary is brief description of what this module is
+            // ------------------------------------------------------------------------
+            'summary' => __('Blade templates for the TemplateEngineFactory'),
+
+            // ------------------------------------------------------------------------
+            // Version: major, minor, revision, i.e. 100 = 1.1.0
+            // ------------------------------------------------------------------------
+            'version' => 100,
+            'author' => 'Maurizio Bonani (Mauricius)',
+
+            // ------------------------------------------------------------------------
+            // Optional URL to more information about the module
+            // ------------------------------------------------------------------------
+            'href' => 'https://github.com/',
+
+            // ------------------------------------------------------------------------
+            // Indicates that only one instance of the module is allowed.
+            // ------------------------------------------------------------------------
+            'singular' => true,
+
+            // ------------------------------------------------------------------------
+            // Indicates the module should be started with ProcessWire.
+            // ------------------------------------------------------------------------
+            'autoload' => true,
+
+            // ------------------------------------------------------------------------
+            // Modules required by this module.
+            // ------------------------------------------------------------------------
+            'requires' => array('PHP>=5.6.0', 'ProcessWire>=3.0.0'),
+        );
+    }
+
+
+    /**
+     * ------------------------------------------------------------------------
+     * Configure the input fields for the backend.
+     * ------------------------------------------------------------------------
+     * @param  array  $data Module data from the database.
+     * @return InputfieldWrapper
+     */
+    public static function getModuleConfigInputfields(array $data)
+    {
+        $data = array_merge(self::getDefaultConfig(), $data);
+
+        $wrapper = new InputfieldWrapper();
+        $modules = wire('modules');
+
+        $f = $modules->get('InputfieldText');
+        $f->name = 'templates_path';
+        $f->label = __('Path to templates');
+        $f->description = __('Relative path from the site directory where template files are stored. E.g. "templates/views/" resolves to "/site/templates/views/"');
+        $f->value = $data['templates_path'];
+        $f->required = 1;
+        $wrapper->append($f);
+
+        $f = $modules->get('InputfieldText');
+        $f->label = __('API variable');
+        $f->description = __('Enter the name of the API variable with which you can interact with the current active template');
+        $f->name = 'api_var';
+        $f->value = $data['api_var'];
+        $f->required = 1;
+        $wrapper->append($f);
+
+        $f = $modules->get('InputfieldText');
+        $f->label = __('Template files suffix');
+        $f->description = __('File extension of template files');
+        $f->name = 'template_files_suffix';
+        $f->value = $data['template_files_suffix'];
+        $f->required = 1;
+        $wrapper->append($f);
+
+        $f = $modules->get('InputfieldCheckbox');
+        $f->label = __('Import ProcessWire API variables in Blade templates');
+        $f->description = __('All API variables (page, input, config etc.) are accessible in Blade, e.g. {{ $page } for $page');
+        $f->name = 'api_vars_available';
+        if ($data['api_vars_available']) $f->checked = 1;
+        $wrapper->append($f);
+
+        return $wrapper;
+    }
+}
