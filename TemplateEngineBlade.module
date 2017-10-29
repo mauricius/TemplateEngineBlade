@@ -149,6 +149,17 @@ class TemplateEngineBlade extends WireData implements Module, ConfigurableModule
 
     /**
      * ------------------------------------------------------------------------
+     * Get the Blade instance
+     * ------------------------------------------------------------------------
+     * @return Blade
+     */
+    public function getBladeInstance()
+    {
+        return $this->blade;
+    }
+
+    /**
+     * ------------------------------------------------------------------------
      * Get the path where compiled templates are stored.
      * ------------------------------------------------------------------------
      * @return string
@@ -325,13 +336,13 @@ class TemplateEngineBlade extends WireData implements Module, ConfigurableModule
             // ------------------------------------------------------------------------
             // Version: major, minor, revision, i.e. 100 = 1.1.0
             // ------------------------------------------------------------------------
-            'version' => 100,
+            'version' => 110,
             'author' => 'Maurizio Bonani (Mauricius)',
 
             // ------------------------------------------------------------------------
             // Optional URL to more information about the module
             // ------------------------------------------------------------------------
-            'href' => 'https://github.com/',
+            'href' => 'https://github.com/mauricius/TemplateEngineBlade',
 
             // ------------------------------------------------------------------------
             // Indicates that only one instance of the module is allowed.
