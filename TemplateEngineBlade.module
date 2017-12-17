@@ -8,7 +8,7 @@
  * @license MIT
  * @create  2016-04-30
  * @style   Tab size: 4 / Soft tabs: YES
- * @version 1.0.0
+ * @version 1.1.1
  *
  * ----------------------------------------------------------------------------------
  */
@@ -242,7 +242,7 @@ class TemplateEngineBlade extends WireData implements Module, ConfigurableModule
      * @throws WireException
      * @return mixed
      */
-    public function render($event)
+    public function render()
     {
         try {
             return $this->blade->view()->make($this->getTemplateName())->render();
@@ -336,7 +336,7 @@ class TemplateEngineBlade extends WireData implements Module, ConfigurableModule
             // ------------------------------------------------------------------------
             // Version: major, minor, revision, i.e. 100 = 1.1.0
             // ------------------------------------------------------------------------
-            'version' => 110,
+            'version' => 111,
             'author' => 'Maurizio Bonani (Mauricius)',
 
             // ------------------------------------------------------------------------
