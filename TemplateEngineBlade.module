@@ -8,7 +8,7 @@
  * @license MIT
  * @create  2016-04-30
  * @style   Tab size: 4 / Soft tabs: YES
- * @version 1.1.1
+ * @version 1.2.0
  *
  * ----------------------------------------------------------------------------------
  */
@@ -30,6 +30,7 @@ use function ProcessWire\wireRmdir;
 use function ProcessWire\wireChmod;
 use function ProcessWire\wireMkdir;
 use function ProcessWire\__;
+use function ProcessWire\_n;
 
 class TemplateEngineBlade extends WireData implements Module, ConfigurableModule
 {
